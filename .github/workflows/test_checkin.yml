@@ -1,0 +1,123 @@
+name: Test cocotbext-avalon
+
+on:
+  push:
+    # branches: [ main, develop ]
+  pull_request:
+    # branches: [ main, develop ]
+  schedule:
+    - cron: '0 1 * * 0'  # Weekly on Sunday at 1 AM UTC
+
+jobs:
+  build_icarus:
+    uses: ./.github/workflows/setup_icarus.yml
+
+  test_avalon:
+    name: Test (${{ matrix.python-version }}, ${{ matrix.sim }})
+    runs-on: ubuntu-latest
+    needs: [build_icarus]
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        sim: [icarus, verilator]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Cache Icarus
+        if: matrix.sim == 'icarus'
+        uses: actions/cache@v4
+        with:
+          path: ${{ needs.build_icarus.outputs.cache_dir }}
+          key: ${{ needs.build_icarus.outputs.cache_key }}
+
+      - name: Add Icarus to PATH
+        if: matrix.sim == 'icarus'
+        run: |
+          echo "${{ needs.build_icarus.outputs.cache_dir }}/bin" >> $GITHUB_PATH
+          sudo apt install -y ccache
+
+      - name: Setup Verilator
+        if: matrix.sim == 'verilator'
+        uses: veryl-lang/setup-verilator@v1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-xdist
+
+      - name: Verify installation
+        run: |
+          python -c "from cocotbext.avalon import AvalonMaster, AvalonBus; print('✅ cocotbext-avalon imported')"
+
+      - name: Run test_slverr
+        run: |
+          cd tests/test_slverr
+          make sim SIM=${{ matrix.sim }}
+
+      # - name: Upload test results
+      #   if: always()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: test-results-${{ matrix.python-version }}-${{ matrix.sim }}
+      #     path: tests/test_slverr/results.xml
+      #     retention-days: 7
+
+  test_summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: test_avalon
+    if: always()
+    
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test_avalon.result }}" == "success" ]; then
+            echo "✅ All tests passed!"
+            exit 0
+          else
+            echo "❌ Some tests failed"
+            exit 1
+          fi
+
+  pypi_release:
+    name: PyPI Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    runs-on: ubuntu-latest
+    needs: [test_avalon]
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      
+      - name: Build package
+        run: |
+          python -m build
+      
+      - name: Check package
+        run: |
+          twine check dist/*
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+

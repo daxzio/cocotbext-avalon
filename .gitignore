@@ -1,0 +1,14 @@
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.tox/
+*.vcd
+*.fst
+sim_build/
+results.xml
+.coverage
+*.log
+

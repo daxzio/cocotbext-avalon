@@ -1,0 +1,32 @@
+name: Build Verilator
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily
+  workflow_dispatch:
+
+jobs:
+  build_dep:
+    uses: ./.github/workflows/setup_verilator.yml
+
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    needs: [build_dep]
+    steps:
+      - name: Cache Verilator
+        uses: actions/cache@v4
+        with:
+          path: ${{ needs.build_dep.outputs.cache_dir }}
+          key: ${{ needs.build_dep.outputs.cache_key }}
+      - name: Add to PATH
+        run: |
+          echo "${{ needs.build_dep.outputs.cache_dir }}/bin" >> $GITHUB_PATH
+
+      - name: Report Verilator
+        run: |
+          which verilator
+          verilator --version
+
