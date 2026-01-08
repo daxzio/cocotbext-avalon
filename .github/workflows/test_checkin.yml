@@ -29,7 +29,7 @@ jobs:
 
       - name: Cache Icarus
         if: matrix.sim == 'icarus'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ needs.build_icarus.outputs.cache_dir }}
           key: ${{ needs.build_icarus.outputs.cache_key }}
